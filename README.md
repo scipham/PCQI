@@ -9,6 +9,7 @@ Time-Dependent processes with Neural Quantum States: Computing the Out-of-time c
 Pim Veefkind (Studentnummer = XXXXXXX)
 Thomas Rothe (Studentnummer = 1930443)
 
+
 ## Usage
 
 ### Run NQS simulation:
