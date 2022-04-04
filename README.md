@@ -7,6 +7,7 @@ Time-Dependent processes with Neural Quantum States: Computing the Out-of-time c
 
 ## Authors
 Pim Veefkind (Studentnummer = XXXXXXX)
+
 Thomas Rothe (Studentnummer = 1930443)
 
 
