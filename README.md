@@ -1,4 +1,4 @@
-# Second Project COP: Monte-Carlo Simulation
+# Course Project PCQI: Time-Dependent processes with Neural Quantum States
 
 Course Project for Physics and Classical/Quantum Information 2022: 
 Time-Dependent processes with Neural Quantum States: Computing the Out-of-time correlation (OTOC) of Neural Quantum States (NQS) for the Transverse Field Ising Model (TFIM).
