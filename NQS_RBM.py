@@ -1,7 +1,8 @@
 import numpy as np
-import os
+import sys
 import pickle
-
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 def sigmoid(X):
     return 1./(np.exp(X)+1)
@@ -279,7 +280,7 @@ class NQS_RBM:
         else:
             return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, ensemble_prob_amps), pauliExpVals
             
-    def WeightUpdateSmoothed(self, o_weights,lrate,ep, expectations, regularize=True):   
+    def WeightUpdateSmoothed(self, o_weights,lrate,ep, expectations, reg_strength=1.0):   
  
         L = self.Nv
         H = self.Nh
@@ -312,20 +313,18 @@ class NQS_RBM:
         #
         S_kkSorella = moment2ExpVal - np.outer(np.conj(derivsExpVal),derivsExpVal)
         
-        S_kk = S_kkSorella
         #S_kk = S_kkCartesian
         
-        if regularize:
-            #
-            #   - Regulator necessary to ensure inverse exists
-            #
-            lreg = np.max(np.array([100*(0.0005)**ep,0.01]))  
-            S_kkSorellaReg =  0.5 * np.diag(np.diag(S_kkCartesian))
-            #
-            #S_kk = S_kkCartesian
-            S_kk = S_kkSorella + S_kkSorellaReg #Sorella = use variance in parameters/their derivates to adjust learning rate individually (per parameter type, per parameter)!
-   
+        #
+        #   - Regulator necessary to ensure inverse exists
+        #
+        lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01]))    
+        S_kkSorellaReg =  lreg * np.diag(np.diag(S_kkCartesian))
         
+        #
+        #S_kk = S_kkCartesian
+        S_kk = S_kkSorella + S_kkSorellaReg #Sorella = use variance in parameters/their derivates to adjust learning rate individually (per parameter type, per parameter)!
+    
         agrad = np.copy(agradientEStat)
         cgrad = np.copy(cgradientEStat)
         Wgrad = np.copy(WgradientEStat)
@@ -369,7 +368,7 @@ class NQS_RBM:
         E_exact_per_site = -self.hamilt.J*np.sum(free_fermion_modes)/self.Nv #Number of modes on each site * energy of occupation = interaction energy
         return E_exact_per_site
         
-    def get_RBM_GS(self, kContrastDiv, lrate,epochs):
+    def get_RBM_GS(self, kContrastDiv, lrate,epochs, reg_strength=1.0):
         # Service message
         print("""\
             Performing variational ground state search with:
@@ -394,7 +393,7 @@ class NQS_RBM:
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv) #Get  representative samples
             
             expectations = self.evaluate_exp_vals(self.weights, Vensemble)
-            self.weights = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, True) #Update paramters by fixed paramter gradients on ensemble
+            self.weights = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, reg_strength) #Update paramters by fixed paramter gradients on ensemble
             
             EExpVal = expectations[0]
             EVarPerSite = np.real(EExpVal)/self.Nv
@@ -415,7 +414,7 @@ class NQS_RBM:
         sampler = 'MetroSmoothed'
         results = (Convergence, Percentage, aRBM, cRBM, WRBM, E_exact_per_site)
                 
-        WORKDIR_PATH =os.getcwd()
+        WORKDIR_PATH = sys.path[0]
         DATA_PATH = WORKDIR_PATH + "/GS_archive/" 
         filename = f'NQSdata_J{self.hamilt.J:01}_h{self.hamilt.h:01}_{sampler}_Cycles{kContrastDiv}_Epochs{epochs}.pickle'
         print('\nFile = ', filename)

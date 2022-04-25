@@ -1,15 +1,16 @@
-import os
 import numpy as np
-from NQS_RBM import NQS_RBM
+import sys
 import pickle
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from NQS_RBM import *
 
 class TD_NQS_RBM(NQS_RBM):
     '''
     Defines a Time Dependent (TD) simulation of an NQS RBM model
     '''
-    def __init__(self, init_H, Nv,Nh, init_mode="ground_state", init_state_params={"kContrastDiv": 6000, "lrate": 0.4, "epochs": 52}):
+    def __init__(self, init_H, Nv,Nh, init_mode="ground_state", init_state_params={"kContrastDiv": 6000, "lrate": 0.4, "epochs": 75}):
         
         #Initialize a static NQS model
         super().__init__(init_H, Nv,Nh) 
@@ -27,7 +28,7 @@ class TD_NQS_RBM(NQS_RBM):
                 k_samples = init_state_params["kContrastDiv"]
                 epochs = init_state_params["epochs"]
                 
-                WORKDIR_PATH =os.getcwd()
+                WORKDIR_PATH = sys.path[0]
                 DATA_PATH = WORKDIR_PATH + "/GS_archive/" 
                 filename = f'NQSdata_J{self.hamilt.J:01}_h{self.hamilt.h:01}_{sampler}_Cycles{k_samples}_Epochs{epochs}.pickle'
                 
@@ -57,7 +58,7 @@ class TD_NQS_RBM(NQS_RBM):
             raise ValueError("Unknown state initialization mode")
         
         
-    def evolute_quench(self, target_H, delta_t,end_of_time, time_lrate, kContrastDiv):
+    def evolute_quench(self, target_H, delta_t,end_of_time, kContrastDiv, reg_strength):
         """
         Performing Quantum Quench on RBM NQS using Stochastic Reconfiguration
         """
@@ -68,12 +69,17 @@ class TD_NQS_RBM(NQS_RBM):
         
         #Initialize outputs
         energies = np.array([])
+        pauli_exp_over_time = []
         paulix_mean = np.array([])
         
         reject_percent = np.array([0])
         evol_phases = np.array([]) #Acquinted phases through evolution 
         
         old_ensemble_prob_amps = np.array([])
+        
+        required_paulis = [[f"X{s}" for s in range(self.Nv)],[f"Z{s}" for s in range(self.Nv)]]
+        print(required_paulis)
+        
         
         #Run time
         for t in tqdm(np.arange(0, end_of_time,delta_t)):
@@ -83,14 +89,12 @@ class TD_NQS_RBM(NQS_RBM):
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv)
             
             #Evaluate all expectations at once from ensemble:
-            #required_paulis = [[f"X{s}" for s in range(self.Nv)],["X0", "Y1"], ["Y0", "X1"]]
-            required_paulis = [[f"X{s}" for s in range(self.Nv)]]
             expectations, pauliExpVals = self.evaluate_exp_vals(self.weights, Vensemble, paulis=required_paulis)
             EExpVal = expectations[0]
             
             #Get Updated weights for next timestep: |psi(t + delta_t)>
-            im_time_lrate = -1j*time_lrate #Imaginary time learning rate for evolution
-            new_weights = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, expectations, True) #Note: disabled regularization of covar-matrix.
+            im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
+            new_weights = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, expectations, reg_strength) #Note: disabled regularization of covar-matrix.
             
             #Get acquinted phase change in evolution:
             new_ensemble_prob_amps = expectations[-1]
@@ -106,11 +110,15 @@ class TD_NQS_RBM(NQS_RBM):
             E_per_site = np.real(EExpVal)/self.Nv
             energies = np.append(energies, E_per_site)
             reject_percent = np.append(reject_percent, prct)
-            paulix_mean = np.append(paulix_mean, np.mean(pauliExpVals))
+            paulix_mean = np.append(paulix_mean, np.mean(pauliExpVals[0]))
+            pauli_exp_over_time.append(pauliExpVals)
 
             #print(pauliExpVals)
-
-        return energies, paulix_mean
+        
+        #Pack output and return
+        pauli_output = (required_paulis, pauli_exp_over_time)
+        
+        return energies, pauli_output, paulix_mean
             
         #--------Store and return results
         #--------Calculate other fun quantities with the obtained expectation values
