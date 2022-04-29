@@ -17,7 +17,7 @@ RESULTS_PATH = EXPERIMENTS_PATH + "/data/"
 init_H = TFIM(h=1/2, g=1/2)
 target_H = TFIM(h=1, g=1)
 
-delta_t = 0.06
+delta_t = 0.005
 end_of_time = 0.3
 
 
