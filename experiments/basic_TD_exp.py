@@ -17,21 +17,21 @@ RESULTS_PATH = EXPERIMENTS_PATH + "/data/"
 init_H = TFIM(h=1/2, g=1/2)
 target_H = TFIM(h=1, g=1)
 
-delta_t = 0.01
-end_of_time = 0.5
+delta_t = 0.06
+end_of_time = 0.3
 
 
 td_nqs_model = TD_NQS_RBM(init_H = init_H,
                             Nv = 10,
                             Nh = 40,
                             init_mode="ground_state",
-                            init_state_params={"kContrastDiv": 6000, "lrate": 0.4, "epochs": 75})
+                            init_state_params={"kContrastDiv": 6000, "lrate": 0.4, "epochs": 70})
 
 time_evol_output = td_nqs_model.evolute_quench(target_H=target_H,
                             delta_t=delta_t,
                             end_of_time=end_of_time,
                             kContrastDiv=6000,
-                            reg_strength=1.0)
+                            reg_strength=0.0005)
 
 plt.plot(np.arange(0,end_of_time,delta_t),time_evol_output[2]) #Pauli-x-mean
 plt.plot(np.arange(0,end_of_time,delta_t),time_evol_output[0]) #Energies

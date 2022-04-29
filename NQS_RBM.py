@@ -318,7 +318,8 @@ class NQS_RBM:
         #
         #   - Regulator necessary to ensure inverse exists
         #
-        lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01]))    
+        #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
+        lreg = reg_strength   
         S_kkSorellaReg =  lreg * np.diag(np.diag(S_kkCartesian))
         
         #
