@@ -16,10 +16,11 @@ RESULTS_PATH = EXPERIMENTS_PATH + "/data/"
 
 init_H = TFIM(h=1/2, g=1/2)
 target_H = TFIM(h=1, g=1)
+#init_H = TFIM(h=4, g=4)
+#target_H = TFIM(h=2, g=2)
 
 delta_t = 0.005
-end_of_time = 0.3
-
+end_of_time = 0.5
 
 td_nqs_model = TD_NQS_RBM(init_H = init_H,
                             Nv = 10,
@@ -31,11 +32,13 @@ time_evol_output = td_nqs_model.evolute_quench(target_H=target_H,
                             delta_t=delta_t,
                             end_of_time=end_of_time,
                             kContrastDiv=6000,
-                            reg_strength=0.0005)
+                            reg_mode='diag_shift',
+                            reg_strength=0.0005,
+                            val_fraction=0.2)
 
-plt.plot(np.arange(0,end_of_time,delta_t),time_evol_output[2]) #Pauli-x-mean
-plt.plot(np.arange(0,end_of_time,delta_t),time_evol_output[0]) #Energies
-plt.show()
+#plt.plot(np.arange(0,end_of_time,delta_t),time_evol_output[2]) #Pauli-x-mean
+#plt.plot(np.arange(0,end_of_time,delta_t),time_evol_output[0]) #Energies
+#plt.show()
 
 #with open(RESULTS_PATH+"temp_result.pickle",'wb') as f:
 #    pickle.dump(time_evol_output,f)
@@ -46,3 +49,4 @@ plt.show()
 
 time = np.arange(0,end_of_time, delta_t )
 plot_time_dependent_exp_vals(time, time_evol_output[0],  time_evol_output[1]) 
+plot_time_evolution_errors(time, time_evol_output[2])

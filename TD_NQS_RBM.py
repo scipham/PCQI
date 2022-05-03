@@ -56,9 +56,24 @@ class TD_NQS_RBM(NQS_RBM):
             pass
         else:
             raise ValueError("Unknown state initialization mode")
+    
+    def TD_validation_error(self,train_gradients, val_gradients):
+        #(paras_deriv, S_kk, gradE, EVarExpVal)
+        thetadot_F_train = np.matmul(np.conj(train_gradients[0]), train_gradients[2]) #\dot(\theta)^\dagger F
+        thetadot_S_thetadot_train = np.matmul(np.matmul(np.conj(train_gradients[0]), train_gradients[1]), train_gradients[0])
+        Fdagger_thetadot_train = np.matmul(np.conj(train_gradients[2]).T , train_gradients[0])
         
+        tdpv_error = 1 + (thetadot_S_thetadot_train + 1j*thetadot_F_train - 1j*Fdagger_thetadot_train) / train_gradients[-1]
         
-    def evolute_quench(self, target_H, delta_t,end_of_time, kContrastDiv, reg_strength):
+        thetadot_F_val = np.matmul(np.conj(val_gradients[0]), train_gradients[2]) #\dot(\theta)^\dagger F
+        thetadot_S_thetadot_val = np.matmul(np.matmul(np.conj(val_gradients[0]), train_gradients[1]), val_gradients[0])
+        Fdagger_thetadot_val = np.matmul(np.conj(train_gradients[2]).T , val_gradients[0])
+        
+        val_error = 1 + (thetadot_S_thetadot_val + 1j*thetadot_F_val - 1j*Fdagger_thetadot_val) / train_gradients[-1]
+        
+        return tdpv_error, val_error
+        
+    def evolute_quench(self, target_H, delta_t,end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction):
         """
         Performing Quantum Quench on RBM NQS using Stochastic Reconfiguration
         """
@@ -70,9 +85,10 @@ class TD_NQS_RBM(NQS_RBM):
         #Initialize outputs
         energies = np.array([])
         pauli_exp_over_time = []
-        paulix_mean = np.array([])
-        
+        tdvp_error_over_time = []
+        val_error_over_time = []
         reject_percent = np.array([0])
+
         evol_phases = np.array([]) #Acquinted phases through evolution 
         
         old_ensemble_prob_amps = np.array([])
@@ -80,22 +96,29 @@ class TD_NQS_RBM(NQS_RBM):
         required_paulis = [[f"X{s}" for s in range(self.Nv)],[f"Z{s}" for s in range(self.Nv)]]
         print(required_paulis)
         
-        
         #Run time
         for t in tqdm(np.arange(0, end_of_time,delta_t)):
-
+            
+            im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
             
             #Sample ensemble of configurations for expectation evaluation and evolution
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv)
             
-            #Evaluate all expectations at once from ensemble:
-            expectations, pauliExpVals = self.evaluate_exp_vals(self.weights, Vensemble, paulis=required_paulis)
+            #Split for validation and evaluate expect. on validation set:
+            Vensemble_train, Vensemble_val = np.split(Vensemble, [int((1-val_fraction) * Vensemble.shape[0])], axis=0)
+            val_expectations = self.evaluate_exp_vals(self.weights, Vensemble_val, paulis=[[None]])
+            val_weights, val_gradients = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, val_expectations, reg_mode, reg_strength) 
+            
+            #Evaluate all expectations at once from (training) ensemble:
+            expectations, pauliExpVals = self.evaluate_exp_vals(self.weights, Vensemble_train, paulis=required_paulis)
             EExpVal = expectations[0]
             
             #Get Updated weights for next timestep: |psi(t + delta_t)>
-            im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
-            new_weights = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, expectations, reg_strength) #Note: disabled regularization of covar-matrix.
+            new_weights, train_gradients = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, expectations, reg_mode, reg_strength) 
             
+            #Calculate the tdvp and validation errors:
+            tdvp_error, val_error = self.TD_validation_error(train_gradients, val_gradients) 
+              
             #Get acquinted phase change in evolution:
             new_ensemble_prob_amps = expectations[-1]
             overlap_psi_t_psi_t_dt = self.RMB_inner_product(old_ensemble_prob_amps, new_ensemble_prob_amps)
@@ -110,15 +133,16 @@ class TD_NQS_RBM(NQS_RBM):
             E_per_site = np.real(EExpVal)/self.Nv
             energies = np.append(energies, E_per_site)
             reject_percent = np.append(reject_percent, prct)
-            paulix_mean = np.append(paulix_mean, np.mean(pauliExpVals[0]))
             pauli_exp_over_time.append(pauliExpVals)
-
+            tdvp_error_over_time.append(tdvp_error)
+            val_error_over_time.append(val_error) 
             #print(pauliExpVals)
         
         #Pack output and return
         pauli_output = (required_paulis, pauli_exp_over_time)
+        evol_errors = (tdvp_error_over_time, val_error_over_time)
         
-        return energies, pauli_output, paulix_mean
+        return energies, pauli_output, evol_errors
             
         #--------Store and return results
         #--------Calculate other fun quantities with the obtained expectation values

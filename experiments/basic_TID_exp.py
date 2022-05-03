@@ -23,6 +23,7 @@ nqs_model = NQS_RBM(hamilt = hamilt,
 nqs_results = nqs_model.get_RBM_GS(kContrastDiv = 6000,
                               lrate = 0.4,
                               epochs = 75,
+                              reg_mode = 'shift',
                               reg_strength=1.0)
 
 
