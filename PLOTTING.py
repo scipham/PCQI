@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import pickle
-from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 def plot_time_independent_convergence(Convergence,Percentage, EexactPerSite):
     Eexc = EexactPerSite*np.ones(Convergence.shape[0]-1)
@@ -36,12 +36,28 @@ def plot_time_dependent_exp_vals(time,energies, pauli_result):
         
     
     plt.plot(time, np.abs(np.array(x_over_time)))
+    plt.xlabel('time (s)')
     plt.ylabel(r'\sigma_x')
-    plt.ylim((0.1, 1.0))
+    plt.ylim((-1.1, 1.1))
     plt.show()
     plt.plot(time, np.real(np.array(z_over_time)))
+    plt.xlabel('time (s)')
     plt.ylabel(r'\sigma_z')
+    plt.ylim((-1.1, 1.1))
     plt.show()
     plt.plot(time,energies)
     plt.ylabel(r'Energy per site')
+    plt.show()
+    
+def plot_time_evolution_errors(time, evol_errors):
+    tdvp_error_over_time = np.array(evol_errors[0])
+    val_error_over_time = np.array(evol_errors[1])
+
+    plt.plot(time, tdvp_error_over_time, label=r'r^2_{tr}')
+    plt.plot(time, val_error_over_time, label=r'r^2_{val}')
+    
+    plt.xlabel('time (s)')
+    plt.ylabel(r'r^2-error')
+    plt.yscale('log')
+    plt.legend()
     plt.show()

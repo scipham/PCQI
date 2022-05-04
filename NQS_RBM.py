@@ -215,6 +215,7 @@ class NQS_RBM:
         LnNormPsi = 0
         EExpVal = 0
         ElocalExpVal = 0
+        Elocal2ExpVal = 0
         ElocalVExpVal = 0
         ElocalHExpVal = 0
         ElocalWExpVal = 0
@@ -257,11 +258,13 @@ class NQS_RBM:
             # Computing ensemble averages (uniform distrib. over all sampled configs)
             #
             ElocalExpVal = ElocalExpVal + ElocalPsi/LenEnsemb
+            Elocal2ExpVal = Elocal2ExpVal + (ElocalPsi**2/LenEnsemb)
             ElocalVExpVal = ElocalVExpVal + np.real(ElocalVPsi)/(LenEnsemb)
             ElocalHExpVal = ElocalHExpVal + np.real(ElocalHPsi)/(LenEnsemb)
             ElocalWExpVal = ElocalWExpVal + np.real(ElocalWPsi)/(LenEnsemb)
             derivsExpVal = derivsExpVal + derivs/LenEnsemb
             moment2ExpVal = moment2ExpVal + moment2/LenEnsemb
+            
             
             #Evaluate Ensemble probability amplitudes <s|psi>
             np.append(ensemble_prob_amps, LnPsi)
@@ -276,11 +279,11 @@ class NQS_RBM:
                         pauliExpVals[i_str][i] += pauli_exp / (LenEnsemb)
         
         if paulis[0][0] == None:
-            return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, ensemble_prob_amps)
+            return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps)
         else:
-            return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, ensemble_prob_amps), pauliExpVals
+            return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps), pauliExpVals
             
-    def WeightUpdateSmoothed(self, o_weights,lrate,ep, expectations, reg_strength=1.0):   
+    def WeightUpdateSmoothed(self, o_weights,lrate,ep, expectations, reg_mode='diag_shift', reg_strength=1.0):   
  
         L = self.Nv
         H = self.Nh
@@ -292,7 +295,7 @@ class NQS_RBM:
         cgradientEExpVal = 0
         WgradientEExpVal = 0
         
-        ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, ensemble_prob_amps = expectations
+        ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps = expectations
         #
         # Statistical local gradients, ignoring the quantum mechanical term
         #
@@ -302,6 +305,7 @@ class NQS_RBM:
         agradientEStat = - ElocalVExpVal + ElocalExpVal*VExpVal
         cgradientEStat = - ElocalHExpVal + ElocalExpVal*HExpVal
         WgradientEStat = - ElocalWExpVal + ElocalExpVal*WExpVal
+        EVarExpVal = Elocal2ExpVal - ElocalExpVal**2
         #
         # Computing metric on Probability space
         #
@@ -318,10 +322,21 @@ class NQS_RBM:
         #
         #   - Regulator necessary to ensure inverse exists
         #
-        #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
-        lreg = reg_strength   
-        S_kkSorellaReg =  lreg * np.diag(np.diag(S_kkCartesian))
         
+        condit_number = 1e-15 #Default numpy value
+        S_kkSorellaReg = 0
+        
+        if reg_mode == 'diag_shift':
+            #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
+            lreg = reg_strength
+            S_kkSorellaReg = lreg * np.diag(np.diag(S_kkCartesian))
+        elif reg_mode == "trunc_spec":
+            #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
+            lreg = reg_strength
+            condit_number = lreg
+            S_kkSorellaReg = 0
+        else:
+            raise ValueError('Unknown regularization mode')
         #
         #S_kk = S_kkCartesian
         S_kk = S_kkSorella + S_kkSorellaReg #Sorella = use variance in parameters/their derivates to adjust learning rate individually (per parameter type, per parameter)!
@@ -344,9 +359,11 @@ class NQS_RBM:
         gradE = np.conj(np.concatenate((agrad,cgrad,Wgradtemp)))
         #
         #print('output',np.mean(S_kk), np.mean(gradE))
-        deltaparas = lrate * np.einsum('ij,j->i',np.linalg.pinv(S_kk),gradE) #Learning rate in metric x gradient
-        paras = paras - deltaparas #Update parameters (collectively in one big array)
-        print('average weight update size:', np.average(deltaparas))
+        paras_deriv = np.einsum('ij,j->i',np.linalg.pinv(S_kk, rcond=condit_number),gradE) #Learning rate in metric x gradient
+        #paras_deriv = np.matmul(np.linalg.pinv(S_kk),gradE) #Learning rate in metric x gradient
+
+        paras = paras - (lrate * paras_deriv) #Update parameters (collectively in one big array)
+        print('average weight update size:', np.average(lrate * paras_deriv))
         #
         #
         
@@ -357,7 +374,7 @@ class NQS_RBM:
         #
         #print('Local Energy: ', ElocalExpVal)
         #
-        return n_weights
+        return n_weights, (paras_deriv, S_kk, gradE, EVarExpVal)
     
     def get_exact_GS(self):
         # The transverse field Ising model happens to
@@ -369,7 +386,7 @@ class NQS_RBM:
         E_exact_per_site = -self.hamilt.J*np.sum(free_fermion_modes)/self.Nv #Number of modes on each site * energy of occupation = interaction energy
         return E_exact_per_site
         
-    def get_RBM_GS(self, kContrastDiv, lrate,epochs, reg_strength=1.0):
+    def get_RBM_GS(self, kContrastDiv, lrate,epochs,reg_mode='diag_shift', reg_strength=1.0):
         # Service message
         print("""\
             Performing variational ground state search with:
@@ -394,7 +411,7 @@ class NQS_RBM:
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv) #Get  representative samples
             
             expectations = self.evaluate_exp_vals(self.weights, Vensemble)
-            self.weights = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, reg_strength) #Update paramters by fixed paramter gradients on ensemble
+            self.weights = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, reg_mode, reg_strength) #Update paramters by fixed paramter gradients on ensemble
             
             EExpVal = expectations[0]
             EVarPerSite = np.real(EExpVal)/self.Nv
