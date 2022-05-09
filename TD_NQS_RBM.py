@@ -129,6 +129,9 @@ class TD_NQS_RBM(NQS_RBM):
             self.weights = new_weights
             old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
             
+            
+            print(val_error, tdvp_error)
+            
             #Store outputs:
             E_per_site = np.real(EExpVal)/self.Nv
             energies = np.append(energies, E_per_site)

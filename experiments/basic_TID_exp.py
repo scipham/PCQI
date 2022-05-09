@@ -14,17 +14,17 @@ EXPERIMENTS_PATH = sys.path[0]
 RESULTS_PATH = EXPERIMENTS_PATH + "/data/" 
 #-------------------------------------------------------
 
-hamilt = TFIM(h=1/2, g=1/2)
+hamilt = TFIM(h=4.0, g=4.0)
 
 nqs_model = NQS_RBM(hamilt = hamilt,
                     Nv = 10,
                     Nh = 40)
 
-nqs_results = nqs_model.get_RBM_GS(kContrastDiv = 6000,
-                              lrate = 0.4,
-                              epochs = 75,
-                              reg_mode = 'shift',
-                              reg_strength=1.0)
+nqs_results = nqs_model.get_RBM_GS(kContrastDiv = 10000,
+                              lrate = 0.1,
+                              epochs = 100,
+                              reg_mode = 'diag_shift',
+                              reg_strength=0.004)
 
 
 #with open(RESULTS_PATH+"temp_result.pickle",'wb') as f:

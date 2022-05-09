@@ -18,7 +18,7 @@ def plot_time_independent_convergence(Convergence,Percentage, EexactPerSite):
     ax.set_ylabel(r'${E_{loc}}/{L}$')
     ax2.set_ylabel("Rejection rate")
     ax.legend()
-    fig;
+    plt.show()
     
 def plot_time_dependent_exp_vals(time,energies, pauli_result):
     x_over_time = []

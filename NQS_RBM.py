@@ -327,8 +327,8 @@ class NQS_RBM:
         S_kkSorellaReg = 0
         
         if reg_mode == 'diag_shift':
-            #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
-            lreg = reg_strength
+            lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
+            #lreg = reg_strength
             S_kkSorellaReg = lreg * np.diag(np.diag(S_kkCartesian))
         elif reg_mode == "trunc_spec":
             #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
@@ -408,10 +408,11 @@ class NQS_RBM:
         #
         for ep in tqdm(range(epochs)):
             #
+            print(type(self.weights))
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv) #Get  representative samples
             
             expectations = self.evaluate_exp_vals(self.weights, Vensemble)
-            self.weights = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, reg_mode, reg_strength) #Update paramters by fixed paramter gradients on ensemble
+            self.weights, gradients = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, reg_mode, reg_strength) #Update paramters by fixed paramter gradients on ensemble
             
             EExpVal = expectations[0]
             EVarPerSite = np.real(EExpVal)/self.Nv
