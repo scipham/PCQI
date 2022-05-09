@@ -3,6 +3,7 @@ import sys
 import pickle
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import timeit
 
 from NQS_RBM import *
 
@@ -102,15 +103,20 @@ class TD_NQS_RBM(NQS_RBM):
             im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
             
             #Sample ensemble of configurations for expectation evaluation and evolution
+            tic = timeit.default_timer()
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv)
+            toc = timeit.default_timer()
+            print(f"Sampling took {toc-tic} seconds")
             
             #Split for validation and evaluate expect. on validation set:
             Vensemble_train, Vensemble_val = np.split(Vensemble, [int((1-val_fraction) * Vensemble.shape[0])], axis=0)
-            val_expectations = self.evaluate_exp_vals(self.weights, Vensemble_val, paulis=[[None]])
+            val_expectations = self.evaluate_exp_vals_Vect(self.weights, Vensemble_val, paulis=[[None]])
+
             val_weights, val_gradients = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, val_expectations, reg_mode, reg_strength) 
             
             #Evaluate all expectations at once from (training) ensemble:
-            expectations, pauliExpVals = self.evaluate_exp_vals(self.weights, Vensemble_train, paulis=required_paulis)
+            expectations, pauliExpVals = self.evaluate_exp_vals_Vect(self.weights, Vensemble_train, paulis=required_paulis)
+            
             EExpVal = expectations[0]
             
             #Get Updated weights for next timestep: |psi(t + delta_t)>
@@ -121,6 +127,8 @@ class TD_NQS_RBM(NQS_RBM):
               
             #Get acquinted phase change in evolution:
             new_ensemble_prob_amps = expectations[-1]
+            if t==0.0:
+                old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
             overlap_psi_t_psi_t_dt = self.RMB_inner_product(old_ensemble_prob_amps, new_ensemble_prob_amps)
             evol_phase = np.angle(overlap_psi_t_psi_t_dt / ((1 - 1j*EExpVal)*delta_t )) / delta_t
             evol_phases = np.append(evol_phases, evol_phase)

@@ -68,6 +68,24 @@ class NQS_RBM:
         LnPsiRMB = LnPrePreFactor + LnPreFactor + np.log(AngleFactor)
         return LnPsiRMB
     
+    def LnRMBWavefunction_Vect(self, W,a,c,V):
+        #
+        # Golden rule of numerics: avoid exponentials.
+        # Use ln's instead.
+        #
+        Wsummed = 0
+        LnPreFactor = 0
+        L = V.shape[1]
+        
+        Wsummed = Wsummed + np.einsum('ij,kj->ki', W, V)
+        LnPreFactor = LnPreFactor - np.einsum('i,ki->k',a, V)
+        
+        # Difference between bits 0 and 1 and spins -1 and 1
+        LnPrePreFactor = np.sum(a)/2 + np.sum(c)/2+np.sum(W)/4
+        AngleFactor = np.prod(1+np.exp(-c[np.newaxis,:] - Wsummed), axis=1)
+        LnPsiRMB = LnPrePreFactor + LnPreFactor + np.log(AngleFactor)
+        return LnPsiRMB
+    
     def MetropolisCycle(self, W,a,c,Vt):
         rejectvalue = 0   
         LnPsiOld = self.LnRMBWavefunction(W,a,c,Vt)
@@ -127,7 +145,40 @@ class NQS_RBM:
         Vensemble_reshape = Vensemble.reshape((k+1,L))
         # print(Vensemble_reshape)
         return Vensemble_reshape, prctrej 
-    
+
+    def Elocal_Vect(self, W,a,c,V):
+        #
+        # Computing the wavefunction for state V
+        #
+        L = V.shape[1]
+        LnPsi = self.LnRMBWavefunction_Vect(W,a,c,V)
+        LnPsiBar = np.conj(LnPsi)
+        #
+        # Computing the energy for state V
+        # First the Ising term
+        #
+        Vshift = np.roll(V, shift=1, axis=1)
+        One = np.ones(V.shape)
+        ElocalJ = -self.hamilt.J*(np.sum((2*V-One)*(2*Vshift-One), axis=1))
+        #
+        # Next the magnetic term -B\sum_i \sigma^x_i
+        # Because this is not diagonal on the
+        # states, we compute 
+        # <V|EB|Psi> instead
+        # The action of Sigma^x_i is
+        # to flip the spin on site i:
+        # i.e. map V[i] to -V[i]+1
+        #
+        EBlocalPsi = 0
+        for i in range(L):
+            V[:, i] = -V[:, i]+1
+            EBlocalPsi = EBlocalPsi - self.hamilt.h*np.exp(self.LnRMBWavefunction_Vect(W,a,c,V)-LnPsi) #Compare flipped with unflipped (sigma_x applied)
+            V[:, i] = -V[:, i]+1
+        
+        ElocalPsi = ElocalJ + EBlocalPsi
+        
+        return ElocalPsi, LnPsi
+        
     def Elocal(self, W,a,c,V):
         #
         # Computing the wavefunction for state V
@@ -195,7 +246,37 @@ class NQS_RBM:
 
         else:
             raise ValueError("Unknown Pauli operator")
+
+    def eval_pauli_Vect(self, operator, site, V):
+        LnPsi = self.LnRMBWavefunction_Vect(self.weights['W'], self.weights['a'], self.weights['c'], V)
+        V = V.copy()
+        
+        if operator == "X":
+            temp_a = np.array(self.weights['a'], dtype = complex)
+            temp_a[site] = -temp_a[site]
+            temp_W = np.array(self.weights['W'], dtype = complex)
+            temp_W[:,site] = -temp_W[:, site] 
+            return np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_x applied)
+        
+        elif operator == "Z":
+            temp_a = np.array(self.weights['a'], dtype = complex)
+            temp_a[site] += 1j*np.pi/2
+            return np.exp(self.LnRMBWavefunction_Vect(self.weights['W'], temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_z applied)
+        
+        elif operator == "Y":
+            #Apply first X than Z + ignore global phase factor -i
+            temp_a = np.array(self.weights['a'], dtype = complex)
+            temp_a[site] = -temp_a[site]
+            temp_W = np.array(self.weights['W'], dtype = complex)
+            temp_W[:,site] = -temp_W[:, site] 
+            
+            temp_a[site] += 1j*np.pi/2
+            return np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_y applied)
+
+        else:
+            raise ValueError("Unknown Pauli operator")
     
+
     def evaluate_exp_vals(self, o_weights, Vensemble, paulis=[[None]]):
                # 
         # <Psi|Operator|Psi> = \sum_{all S,S'} <Psi|S><S|Operator|S'><S'|Psi>
@@ -282,7 +363,93 @@ class NQS_RBM:
             return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps)
         else:
             return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps), pauliExpVals
+    
+    def evaluate_exp_vals_Vect(self, o_weights, Vensemble, paulis=[[None]]):
+        # 
+        # <Psi|Operator|Psi> = \sum_{all S,S'} <Psi|S><S|Operator|S'><S'|Psi>
+        # is approximated by ensemble average
+        # <Psi|Operator|Psi> \simeq \sum_{Gibbs S,S'} <Psi|S><S|Operator|S'><S'|Psi>
+        # For L large dim(S)=2^L, whereas we only need a finite number of Gibbs samples
+        # So this will help greatly at large L
+        #
+        #o_weights = old weights
+        
+        LenEnsemb = Vensemble.shape[0]
+        L = self.Nv
+        H = self.Nh
+        #
+        # Initializing for ensemble Exp(ectation)Val(ue)
+        #
+        LnNormPsi = 0
+        EExpVal = 0
+        ElocalExpVal = 0
+        Elocal2ExpVal = 0
+        ElocalVExpVal = 0
+        ElocalHExpVal = 0
+        ElocalWExpVal = 0
+        derivsExpVal = 0
+        moment2ExpVal = 0
+        
+        ensemble_prob_amps = np.array([])
+        
+        pauliExpVals = [[0 for pauli in pauli_str] for pauli_str in paulis ]
+        
+        #
+        # V now labels a particular state
+        #
+        # Computing the energy for state V
+        #
+        ElocalPsi, LnPsi = self.Elocal_Vect(o_weights['W'],o_weights['a'],o_weights['c'],Vensemble)
+        #
+        # Next we compute 
+        # <V|EV|V> = Elocal*V
+        # <V|EH|V> = <Esigmoid(WV+c)> =Elocal*
+        # <V|EHV|V> = <EVsigmoid(WV+c)>
+        #
+        ElocalVPsi = ElocalPsi[:, np.newaxis]*Vensemble
+        ElocalHPsi = ElocalPsi[:, np.newaxis]*sigmoid(o_weights['c'][np.newaxis, :] + np.einsum('ij,kj->ki',o_weights['W'],Vensemble))  #sigmoid = current h vector
+        ElocalWPsi = ElocalPsi[:, np.newaxis, np.newaxis]*np.einsum('ki,kj->kij',sigmoid(o_weights['c'][np.newaxis, :] + np.einsum('ij,kj->ki',o_weights['W'],Vensemble)),Vensemble)
+        # 
+        # Next we compute 
+        # <V>
+        # <H>
+        # <HV>
+        #
+        derivs = np.concatenate((Vensemble,np.real(sigmoid(o_weights['c'][np.newaxis, :] + np.einsum('ij,kj->ki',o_weights['W'],Vensemble))),np.real(np.einsum('ki,kj->kij',sigmoid(o_weights['c'][np.newaxis, :] + np.einsum('ij,kj->ki',o_weights['W'],Vensemble)),Vensemble)).reshape(LenEnsemb,L*H)), axis=1)
+        #
+        # Matrix of conj.derivs \times derivs
+        #
+        moment2 = np.einsum('ki,kj->kij',np.conj(derivs),derivs)
+        #
+        # Computing ensemble averages (uniform distrib. over all sampled configs)
+        #
+        ElocalExpVal = np.sum(ElocalPsi, axis=0)/LenEnsemb
+        Elocal2ExpVal = np.sum(ElocalPsi**2, axis=0)/LenEnsemb
+        ElocalVExpVal = np.sum(np.real(ElocalVPsi), axis=0)/(LenEnsemb)
+        ElocalHExpVal = np.sum( np.real(ElocalHPsi), axis=0)/(LenEnsemb)
+        ElocalWExpVal = np.sum(np.real(ElocalWPsi), axis=0)/(LenEnsemb)
+        derivsExpVal = np.sum(derivs, axis=0)/LenEnsemb
+        moment2ExpVal = np.sum(moment2, axis=0)/LenEnsemb
+        
+        
+        #Evaluate Ensemble probability amplitudes <s|psi>
+        ensemble_prob_amps = LnPsi
+        
+        #Evaluate additional pauli strings:
+        if paulis[0][0] != None:
+            for (i_str, pauli_str) in enumerate(paulis):
+                for (i, pauli) in enumerate(pauli_str):
+                    operator, site = pauli[0], int(pauli[1])
+
+                    pauli_exp = self.eval_pauli_Vect(operator, site, Vensemble)
+                    pauliExpVals[i_str][i] = np.sum(pauli_exp, axis=0) / (LenEnsemb)
+
+        if paulis[0][0] == None:
+            return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps)
+        else:
+            return (ElocalExpVal, ElocalVExpVal, ElocalHExpVal, ElocalWExpVal, derivsExpVal, moment2ExpVal, Elocal2ExpVal, ensemble_prob_amps), pauliExpVals
             
+    
     def WeightUpdateSmoothed(self, o_weights,lrate,ep, expectations, reg_mode='diag_shift', reg_strength=1.0):   
  
         L = self.Nv
