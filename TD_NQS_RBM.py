@@ -1,3 +1,4 @@
+from unittest import result
 import numpy as np
 import sys
 import pickle
@@ -74,7 +75,7 @@ class TD_NQS_RBM(NQS_RBM):
         
         return tdpv_error, val_error
         
-    def evolute_quench(self, target_H, delta_t,end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction):
+    def evolute_quench(self, target_H, delta_t,end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis):
         """
         Performing Quantum Quench on RBM NQS using Stochastic Reconfiguration
         """
@@ -94,7 +95,6 @@ class TD_NQS_RBM(NQS_RBM):
         
         old_ensemble_prob_amps = np.array([])
         
-        required_paulis = [[f"X{s}" for s in range(self.Nv)],[f"Z{s}" for s in range(self.Nv)]]
         print(required_paulis)
         
         #Run time
@@ -103,10 +103,7 @@ class TD_NQS_RBM(NQS_RBM):
             im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
             
             #Sample ensemble of configurations for expectation evaluation and evolution
-            tic = timeit.default_timer()
             Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv)
-            toc = timeit.default_timer()
-            print(f"Sampling took {toc-tic} seconds")
             
             #Split for validation and evaluate expect. on validation set:
             Vensemble_train, Vensemble_val = np.split(Vensemble, [int((1-val_fraction) * Vensemble.shape[0])], axis=0)
@@ -115,7 +112,10 @@ class TD_NQS_RBM(NQS_RBM):
             val_weights, val_gradients = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, val_expectations, reg_mode, reg_strength) 
             
             #Evaluate all expectations at once from (training) ensemble:
+            tic = timeit.default_timer()
             expectations, pauliExpVals = self.evaluate_exp_vals_Vect(self.weights, Vensemble_train, paulis=required_paulis)
+            toc = timeit.default_timer()
+            print(f"Vectorized evaluation took {toc-tic} seconds")
             
             EExpVal = expectations[0]
             
@@ -149,12 +149,22 @@ class TD_NQS_RBM(NQS_RBM):
             val_error_over_time.append(val_error) 
             #print(pauliExpVals)
         
-        #Pack output and return
+        #Pack output for export and return
         pauli_output = (required_paulis, pauli_exp_over_time)
         evol_errors = (tdvp_error_over_time, val_error_over_time)
         
-        return energies, pauli_output, evol_errors
-            
-        #--------Store and return results
-        #--------Calculate other fun quantities with the obtained expectation values
-        #--------Apply phase corrections with evol_phases from time evolution where needed (for assymetric overlap of states)
+        #Store to file
+        WORKDIR_PATH = sys.path[0]
+        DATA_PATH = WORKDIR_PATH + "/EVOLUTION_archive/" 
+        filename = f'NQS_quench_data_targeth{target_H.h:01}_targetg{target_H.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
+        
+        results = (energies, pauli_output, evol_errors)
+        print('\nFile = ', filename)
+        
+        with open(DATA_PATH+filename,'wb') as f:
+            pickle.dump(results,f)
+         
+        return results
+
+    
+    

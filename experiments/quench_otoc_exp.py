@@ -1,13 +1,14 @@
 #--------Always include this heading in experiments
-from pickle import NEXT_BUFFER
 import sys, os
 from time import time
+from CourseProject.OTOC import OTOC
 sys.path.append(os.path.join(sys.path[0],'..'))
 
 from TFIM import *
 from NQS_RBM import *
 from TD_NQS_RBM import *
 from PLOTTING import *
+from OTOC import *
 
 np.random.seed(12)
 
@@ -23,6 +24,7 @@ target_H = TFIM(h=3.0, g=3.0)
 N_V = 10
 N_H = 40 
 
+
 init_state_params = {"kContrastDiv": 10000, 
                      "lrate": 0.1, 
                      "epochs": 100}
@@ -35,13 +37,16 @@ evol_params = {'target_H': target_H,
             'reg_strength':0.0005,
             'val_fraction':0.2}
 
-td_nqs_model = TD_NQS_RBM(init_H = init_H,
-                            Nv = N_V,
-                            Nh = N_H,
-                            init_mode="ground_state",
-                            init_state_params=init_state_params)
+otoc = OTOC(init_H = init_H,
+            Nv = N_V,
+            Nh = N_H,
+            init_mode="ground_state",
+            init_state_params=init_state_params,
+            evol_type='quench', 
+            evol_params=evol_params)
 
-time_evol_output = td_nqs_model.evolute_quench(**evol_params, required_paulis = [[f"X{s}" for s in range(N_V)],[f"Z{s}" for s in range(N_V)]])
+
+otoc_output = OTOC.compute()
 
 #with open(RESULTS_PATH+"temp_result.pickle",'wb') as f:
 #    pickle.dump(time_evol_output,f)
@@ -51,6 +56,3 @@ time_evol_output = td_nqs_model.evolute_quench(**evol_params, required_paulis = 
 #    time_evol_output = pickle.load(f) #(Convergence, Percentage, aRBM, cRBM, WRBM, E_exact_per_site)
 
 time = np.arange(0,evol_params['end_of_time'], evol_params['delta_t'] )
-
-plot_time_dependent_exp_vals(time, time_evol_output[0],  time_evol_output[1]) 
-plot_time_evolution_errors(time, time_evol_output[2])
