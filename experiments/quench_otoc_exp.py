@@ -1,7 +1,7 @@
 #--------Always include this heading in experiments
 import sys, os
 from time import time
-from OTOC import OTOC
+from COURSEPROJECTS.OTOC import OTOC
 sys.path.append(os.path.join(sys.path[0],'..'))
 
 from TFIM import *
