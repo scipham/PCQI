@@ -14,7 +14,7 @@ class NQS_RBM:
         self.Nv = Nv
         self.Nh = Nh
         self.weights = {}
-        
+        self.applied_ops = ''
     
         # Service message
         print("""\
@@ -218,67 +218,61 @@ class NQS_RBM:
         overlap = np.sqrt(np.conj(v1) * v2) 
         return overlap
     
+    def apply_pauli(self, operator, site, apply_directly):
+        updated_W, updated_a, updated_c = None, None, None
+        if operator == "X":
+            updated_a = np.array(self.weights['a'], dtype = complex)
+            updated_a[site] = -updated_a[site]
+            updated_W = np.array(self.weights['W'], dtype = complex)
+            updated_W[:,site] = -updated_W[:, site]
+            updated_c = self.weights['c']
+        elif operator == "Z":
+            updated_a = np.array(self.weights['a'], dtype = complex)
+            updated_a[site] += 1j*np.pi/2
+            updated_c = self.weights['c']
+            updated_W = self.weights['W']
+        elif operator == "Y":
+            #Apply first X than Z + ignore global phase factor -i
+            updated_a = np.array(self.weights['a'], dtype = complex)
+            updated_a[site] = -updated_a[site]
+            updated_W = np.array(self.weights['W'], dtype = complex)
+            updated_W[:,site] = -updated_W[:, site] 
+            updated_a[site] += 1j*np.pi/2
+            updated_c = self.weights['c']
+        else:
+            raise ValueError("Unknown Pauli operator")
+    
+        if apply_directly:
+            self.applied_ops += f"{operator}{site}"
+            self.weights['W'] = updated_W
+            self.weights['a'] = updated_a
+            self.weights['c'] = updated_c
+        else:
+            return updated_W, updated_a, updated_c
+     
+    def apply_pauli_string(self, pauli_string):
+        for (i, pauli) in enumerate(pauli_string):
+            operator, site = pauli[0], int(pauli[1])
+            self.apply_pauli(operator, site, apply_directly=True)
+            self.applied_ops += "_"
+        self.applied_ops = self.applied_ops[:-1] #Remove last _
+        
     def eval_pauli(self, operator, site, V):
         LnPsi = self.LnRMBWavefunction(self.weights['W'], self.weights['a'], self.weights['c'], V)
         V = V.copy()
-        
-        if operator == "X":
-            temp_a = np.array(self.weights['a'], dtype = complex)
-            temp_a[site] = -temp_a[site]
-            temp_W = np.array(self.weights['W'], dtype = complex)
-            temp_W[:,site] = -temp_W[:, site] 
-            return np.exp(self.LnRMBWavefunction(temp_W, temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_x applied)
-        
-        elif operator == "Z":
-            temp_a = np.array(self.weights['a'], dtype = complex)
-            temp_a[site] += 1j*np.pi/2
-            return np.exp(self.LnRMBWavefunction(self.weights['W'], temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_z applied)
-        
-        elif operator == "Y":
-            #Apply first X than Z + ignore global phase factor -i
-            temp_a = np.array(self.weights['a'], dtype = complex)
-            temp_a[site] = -temp_a[site]
-            temp_W = np.array(self.weights['W'], dtype = complex)
-            temp_W[:,site] = -temp_W[:, site] 
-            
-            temp_a[site] += 1j*np.pi/2
-            return np.exp(self.LnRMBWavefunction(temp_W, temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_y applied)
-
-        else:
-            raise ValueError("Unknown Pauli operator")
+        temp_W, temp_a, temp_c = self.apply_pauli(operator, site, apply_directly=False)
+        return np.exp(self.LnRMBWavefunction(temp_W, temp_a, temp_c, V)-LnPsi) #Compare flipped with unflipped (sigma_x applied)
 
     def eval_pauli_Vect(self, operator, site, V):
         LnPsi = self.LnRMBWavefunction_Vect(self.weights['W'], self.weights['a'], self.weights['c'], V)
         V = V.copy()
         
-        if operator == "X":
-            temp_a = np.array(self.weights['a'], dtype = complex)
-            temp_a[site] = -temp_a[site]
-            temp_W = np.array(self.weights['W'], dtype = complex)
-            temp_W[:,site] = -temp_W[:, site] 
-            return np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_x applied)
-        
-        elif operator == "Z":
-            temp_a = np.array(self.weights['a'], dtype = complex)
-            temp_a[site] += 1j*np.pi/2
-            return np.exp(self.LnRMBWavefunction_Vect(self.weights['W'], temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_z applied)
-        
-        elif operator == "Y":
-            #Apply first X than Z + ignore global phase factor -i
-            temp_a = np.array(self.weights['a'], dtype = complex)
-            temp_a[site] = -temp_a[site]
-            temp_W = np.array(self.weights['W'], dtype = complex)
-            temp_W[:,site] = -temp_W[:, site] 
-            
-            temp_a[site] += 1j*np.pi/2
-            return np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, self.weights['c'], V)-LnPsi) #Compare flipped with unflipped (sigma_y applied)
-
-        else:
-            raise ValueError("Unknown Pauli operator")
-    
+        temp_W, temp_a, temp_c = self.apply_pauli(operator, site, apply_directly=False)
+        return np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, temp_c, V)-LnPsi) #Compare flipped with unflipped (sigma_y applied)
+      
 
     def evaluate_exp_vals(self, o_weights, Vensemble, paulis=[[None]]):
-               # 
+        # 
         # <Psi|Operator|Psi> = \sum_{all S,S'} <Psi|S><S|Operator|S'><S'|Psi>
         # is approximated by ensemble average
         # <Psi|Operator|Psi> \simeq \sum_{Gibbs S,S'} <Psi|S><S|Operator|S'><S'|Psi>
@@ -603,6 +597,7 @@ class NQS_RBM:
         WORKDIR_PATH = sys.path[0]
         DATA_PATH = WORKDIR_PATH + "/GS_archive/" 
         filename = f'NQSdata_J{self.hamilt.J:01}_h{self.hamilt.h:01}_{sampler}_Cycles{kContrastDiv}_Epochs{epochs}.pickle'
+        
         print('\nFile = ', filename)
         
         with open(DATA_PATH+filename,'wb') as f:

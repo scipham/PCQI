@@ -52,5 +52,5 @@ time_evol_output = td_nqs_model.evolute_quench(**evol_params, required_paulis = 
 
 time = np.arange(0,evol_params['end_of_time'], evol_params['delta_t'] )
 
-plot_time_dependent_exp_vals(time, time_evol_output[0],  time_evol_output[1]) 
-plot_time_evolution_errors(time, time_evol_output[2])
+plot_time_dependent_exp_vals(time, time_evol_output[3],  time_evol_output[4]) 
+plot_time_evolution_errors(time, time_evol_output[6])
