@@ -61,3 +61,16 @@ def plot_time_evolution_errors(time, evol_errors):
     plt.yscale('log')
     plt.legend()
     plt.show()
+
+
+def plot_netket_quench(time, Sx_netket, Sx_qutip):
+
+    plt.plot(time,Sx_netket, label = 'Netket approximation')
+    plt.plot(time,Sx_qutip, label = 'Qutip exact solution')
+
+    plt.xlabel('time in (a.u.)')
+    plt.ylabel('<$S_x$>')
+
+    plt.grid()
+
+    plt.show()
