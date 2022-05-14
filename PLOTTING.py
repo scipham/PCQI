@@ -74,3 +74,15 @@ def plot_netket_quench(time, Sx_netket, Sx_qutip):
     plt.grid()
 
     plt.show()
+
+def plot_netket_otoc(time, otocs_exact):
+
+    plt.plot(time,np.real(otocs_exact), label = 'Real part exact solution')
+    plt.plot(time,np.imag(otocs_exact), label = 'Imag part exact solution')
+
+    plt.xlabel('time in (a.u.)')
+    plt.ylabel('value')
+
+    plt.grid()
+
+    plt.show()
