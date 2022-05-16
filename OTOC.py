@@ -65,7 +65,7 @@ class OTOC:
                 return state, results
         except:
             print("File with evoluted state not found or opening failed")
-            print("(Re)Computing ground state...")
+            print("(Re)Computing state evolution...")
             
             return state, state.run_time(**evol_params, required_paulis=required_paulis) 
 
@@ -81,6 +81,8 @@ class OTOC:
         
         if any(np.diff(time_samples) < evol_params['delta_t']):
             raise ValueError("Provide only time samples with difference larger than the evolution timestep")
+        elif 0.0 in time_samples:
+            raise ValueError("Taking the OTOC at t=0.0 doesn't make sense. Give only time samples > 0.0")
         
         self.psi_1.apply_pauli_string(self.op_1)
         init_state_1 = deepcopy(self.psi_1)
@@ -98,6 +100,7 @@ class OTOC:
             
             #Update current initial state to save time in next timestep
             init_state_1, results_1_forward = self.get_evolution(state=init_state_1, evol_params=evol_params, required_paulis=[self.op_1], reverse=False)
+            #print(init_state_1.weights)
             tot_global_phases_1 = np.append(tot_global_phases_1, results_1_forward[-2])
             
             init_state_2, results_2_forward = self.get_evolution(state=init_state_2, evol_params=evol_params, required_paulis=[self.op_1], reverse=False)
@@ -122,23 +125,28 @@ class OTOC:
             
             
             Vensemble, prct = temp_state_1.MetropolisSamp(temp_state_1.weights['W'], temp_state_1.weights['a'], temp_state_1.weights['c'], temp_state_1.V, evol_params['kContrastDiv'])
-            expectations_1 = temp_state_1.evaluate_exp_vals(temp_state_1.weights, Vensemble)
+            expectations_1 = temp_state_1.evaluate_exp_vals_Vect(temp_state_1.weights, Vensemble)
             psi_1_prob_amps = expectations_1[-1]
             Vensemble, prct = temp_state_2.MetropolisSamp(temp_state_2.weights['W'], temp_state_2.weights['a'], temp_state_2.weights['c'], temp_state_2.V, evol_params['kContrastDiv'])
-            expectations_2 = temp_state_2.evaluate_exp_vals(temp_state_2.weights, Vensemble)
+            expectations_2 = temp_state_2.evaluate_exp_vals_Vect(temp_state_2.weights, Vensemble)
             psi_2_prob_amps = expectations_2[-1]
             
             raw_otoc_val = temp_state_1.RMB_inner_product(psi_1_prob_amps, psi_2_prob_amps)
             
             #Cancel acquired evolution phases 
             temp_tot_global_phases_2 = np.conj(temp_tot_global_phases_2)
+            
             otoc_val = raw_otoc_val / (np.sum(temp_tot_global_phases_1) + np.sum(temp_tot_global_phases_2))
+            
+            from time import sleep
+            print("raw: ", raw_otoc_val, (np.prod(temp_tot_global_phases_1) + np.prod(temp_tot_global_phases_2)))
+            sleep(1000)
             
             otoc_output.append(otoc_val)
         
         print("Finished OTOC computation ")
         
-        return time_samples, np.array([otoc_output])
+        return time_samples, np.array([otoc_output]).flatten()
             
 
     def compute_inefficient(self, evol_params, time_samples):
@@ -185,6 +193,7 @@ class OTOC:
             psi_2_prob_amps = expectations_2[-1]
             
             raw_otoc_val = temp_state_1.RMB_inner_product(psi_1_prob_amps, psi_2_prob_amps)
+
             
             #Cancel acquired evolution phases 
             tot_global_phases_2 = np.conj(tot_global_phases_2)
@@ -194,6 +203,6 @@ class OTOC:
         
         print("Finished OTOC computation ")
         
-        return time_samples, np.array([otoc_output])
+        return time_samples, np.array(otoc_output)
                 
    

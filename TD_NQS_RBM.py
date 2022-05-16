@@ -153,6 +153,7 @@ class TD_NQS_RBM(NQS_RBM):
             if t==0.0:
                 old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
             overlap_psi_t_psi_t_dt = self.RMB_inner_product(old_ensemble_prob_amps, new_ensemble_prob_amps)
+            print("overlap t, dt:", overlap_psi_t_psi_t_dt)
             evol_phase = np.angle(overlap_psi_t_psi_t_dt / ((1 - 1j*EExpVal)*delta_t )) / delta_t
             
             #Store the new weights and old probability amplitudes for next timestep
@@ -195,6 +196,7 @@ class TD_NQS_RBM(NQS_RBM):
         filename = f'NQS_runtime_h{self.hamilt.h:01}_g{self.hamilt.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
         self.store_evol_to_file(results, 'run_time', filename)
         self.applied_ops += f'U{delta_t}_'
+
         
         return results
     
