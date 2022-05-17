@@ -43,6 +43,8 @@ time_samples = np.array([0.002, 0.004, 0.006, 0.008]) #np.linspace(0.0, 1.0, 5)
 print(time_samples)
 
 otoc_output = otoc_calculator.compute_efficient(evol_params=evol_params,
-                                     time_samples=time_samples)
+\
+    
+    time_samples=time_samples)
 print(otoc_output[1])
 plt.plot(otoc_output[0], otoc_output[1])

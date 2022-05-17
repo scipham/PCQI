@@ -154,12 +154,11 @@ class TD_NQS_RBM(NQS_RBM):
                 old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
             overlap_psi_t_psi_t_dt = self.RMB_inner_product(old_ensemble_prob_amps, new_ensemble_prob_amps)
             print("overlap t, dt:", overlap_psi_t_psi_t_dt)
-            evol_phase = np.angle(overlap_psi_t_psi_t_dt / ((1 - 1j*EExpVal)*delta_t )) / delta_t
+            evol_phase = np.angle(overlap_psi_t_psi_t_dt / ((1 - 1j*EExpVal*delta_t )))
             
             #Store the new weights and old probability amplitudes for next timestep
             self.weights = new_weights
             old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
-            
             
             print(val_error, tdvp_error)
             

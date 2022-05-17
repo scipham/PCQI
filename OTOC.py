@@ -139,7 +139,8 @@ class OTOC:
             otoc_val = raw_otoc_val / (np.sum(temp_tot_global_phases_1) + np.sum(temp_tot_global_phases_2))
             
             from time import sleep
-            print("raw: ", raw_otoc_val, (np.prod(temp_tot_global_phases_1) + np.prod(temp_tot_global_phases_2)))
+            print("raw: ", raw_otoc_val, (np.prod(np.exp(1j*temp_tot_global_phases_1)) * np.prod(np.exp(1j*temp_tot_global_phases_2))))
+            print(temp_tot_global_phases_1, temp_tot_global_phases_2)
             sleep(1000)
             
             otoc_output.append(otoc_val)
