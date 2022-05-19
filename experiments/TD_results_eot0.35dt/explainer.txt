@@ -1,0 +1,1 @@
+This folder contains an experiment where the simulation is run for different dt for reg 1e4 and 1e5 where the regulation is kept constant.
