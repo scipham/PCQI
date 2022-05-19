@@ -13,7 +13,7 @@ h_init = 3
 N_V = 10
 N_H = 40 
 
-time_samples = np.arange(0,1,0.005)
+time_samples = np.arange(0,1,0.01)
 
 netket_obj = Netket(N_chain = N_chain)
 

@@ -15,24 +15,24 @@ EXPERIMENTS_PATH = sys.path[0]
 RESULTS_PATH = EXPERIMENTS_PATH + "/data/" 
 #-------------------------------------------------------
 
-init_H = TFIM(h=4.0, g=4.0)
-target_H = TFIM(h=3.0, g=3.0)   
+init_H = TFIM(h=0.5, g=0.5)
+target_H = TFIM(h=0.6, g=0.6)     
 #init_H = TFIM(h=4, g=4)
 #target_H = TFIM(h=2, g=2)
 
 N_V = 10
 N_H = 40 
 
-init_state_params = {"kContrastDiv": 10000, 
+init_state_params = {"kContrastDiv": 6000, 
                      "lrate": 0.1, 
-                     "epochs": 100}
+                     "epochs": 70}
 
 evol_params = {'target_H': target_H,
-            'delta_t': 0.001,
-            'end_of_time':0.005,
+            'delta_t': 0.005,
+            'end_of_time':0.05,
             'kContrastDiv': 9000,
             'reg_mode':'diag_shift',
-            'reg_strength':0.0005,
+            'reg_strength':1e-7,
             'val_fraction':0.2}
 
 td_nqs_model = TD_NQS_RBM(init_H = init_H,

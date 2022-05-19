@@ -1,0 +1,1 @@
+Here the reg param is gradually increased according to the formula in NQS_RBM. again, the notation e575 means 7.e-5 this is confusing I know.

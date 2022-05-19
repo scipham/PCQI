@@ -9,10 +9,10 @@ from netket_f.netket import Netket
 N_chain = 10
 
 h_init = 0.5
-h_quench = 1
+h_quench = 0.6
 
-dt = 0.005
-end_of_time = 2 + 1e-8
+dt = 0.0005
+end_of_time = 0.35
 
 netket_obj = Netket(N_chain = N_chain)
 
@@ -26,4 +26,7 @@ if __name__ == "__main__":
 
     time = np.arange(0,end_of_time,dt)
 
-    plot_netket_quench(time, Sx_approx, Sx_exact)
+    #plot_netket_quench(time, Sx_approx, Sx_exact)
+
+    np.save('netket.txt', Sx_approx)
+    np.save('qutip.txt', Sx_exact)

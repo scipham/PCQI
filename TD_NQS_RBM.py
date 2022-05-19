@@ -168,8 +168,8 @@ class TD_NQS_RBM(NQS_RBM):
             reject_percent = np.append(reject_percent, prct)
             pauli_exp_over_time.append(pauliExpVals)
             evol_phases = np.append(evol_phases, evol_phase)
-            tdvp_error_over_time.append(tdvp_error)
-            val_error_over_time.append(val_error)
+            #tdvp_error_over_time.append(tdvp_error)
+            #val_error_over_time.append(val_error)
             
             #print(pauliExpVals)
         
@@ -182,9 +182,9 @@ class TD_NQS_RBM(NQS_RBM):
         cRBM = np.copy(self.weights['c'])
         results = (WRBM, aRBM, cRBM, energies, pauli_output, evol_phases, evol_errors)
         
-        if store_result:
-            filename = f'NQS_quench_targeth{target_H.h:01}_targetg{target_H.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
-            self.store_evol_to_file(results, 'quench', filename)
+        #if store_result:
+        #    filename = f'NQS_quench_targeth{target_H.h:01}_targetg{target_H.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
+        #    self.store_evol_to_file(results, 'quench', filename)
         
         return results
     
@@ -192,9 +192,9 @@ class TD_NQS_RBM(NQS_RBM):
         target_H = self.hamilt
         results = self.evolute_quench(target_H, delta_t, end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis, store_result=False)
         
-        filename = f'NQS_runtime_h{self.hamilt.h:01}_g{self.hamilt.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
-        self.store_evol_to_file(results, 'run_time', filename)
-        self.applied_ops += f'U{delta_t}_'
+        #filename = f'NQS_runtime_h{self.hamilt.h:01}_g{self.hamilt.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
+        #self.store_evol_to_file(results, 'run_time', filename)
+        #self.applied_ops += f'U{delta_t}_'
 
         
         return results
