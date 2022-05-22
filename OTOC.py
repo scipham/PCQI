@@ -39,8 +39,7 @@ class OTOC:
             evol_params["delta_t"] = -1*abs(evol_params["delta_t"])
             
         applied_ops_folder = state.applied_ops
-        
-        try:
+        '''
             delta_t = evol_params["delta_t"]
             end_of_time = evol_params["end_of_time"]
             kContrastDiv = evol_params['kContrastDiv']
@@ -66,11 +65,11 @@ class OTOC:
         except:
             print("File with evoluted state not found or opening failed")
             print("(Re)Computing state evolution...")
-            
-            return state, state.run_time(**evol_params, required_paulis=required_paulis) 
+        '''
+        return state, state.run_time(**evol_params, required_paulis=required_paulis, store_result=False) 
 
-        else:
-            print("Succesfully imported precomputed evolution!")
+        #else:
+        #    print("Succesfully imported precomputed evolution!")
     
     
     def compute_efficient(self, evol_params, time_samples):
@@ -95,6 +94,8 @@ class OTOC:
             time_step = time_samples[it]-time_samples[it-1]
             if it == 0:
                 time_step = time_samples[it]-0.0
+            
+            print(f"\n Busy with iteration {it} of {time_samples.shape[0]} \n \n")
             
             evol_params['end_of_time'] = time_step
             
@@ -124,10 +125,10 @@ class OTOC:
             temp_state_2.apply_pauli_string(self.op_1)
             
             
-            Vensemble, prct = temp_state_1.MetropolisSamp(temp_state_1.weights['W'], temp_state_1.weights['a'], temp_state_1.weights['c'], temp_state_1.V, evol_params['kContrastDiv'])
+            Vensemble, prct = temp_state_1.MetropolisSamp(temp_state_1.weights['W'], temp_state_1.weights['a'], temp_state_1.weights['c'], temp_state_1.init_V, evol_params['kContrastDiv'])
             expectations_1 = temp_state_1.evaluate_exp_vals_Vect(temp_state_1.weights, Vensemble)
             psi_1_prob_amps = expectations_1[-1]
-            Vensemble, prct = temp_state_2.MetropolisSamp(temp_state_2.weights['W'], temp_state_2.weights['a'], temp_state_2.weights['c'], temp_state_2.V, evol_params['kContrastDiv'])
+            Vensemble, prct = temp_state_2.MetropolisSamp(temp_state_2.weights['W'], temp_state_2.weights['a'], temp_state_2.weights['c'], temp_state_2.init_V, evol_params['kContrastDiv'])
             expectations_2 = temp_state_2.evaluate_exp_vals_Vect(temp_state_2.weights, Vensemble)
             psi_2_prob_amps = expectations_2[-1]
             
@@ -136,12 +137,7 @@ class OTOC:
             #Cancel acquired evolution phases 
             temp_tot_global_phases_2 = np.conj(temp_tot_global_phases_2)
             
-            otoc_val = raw_otoc_val / (np.sum(temp_tot_global_phases_1) + np.sum(temp_tot_global_phases_2))
-            
-            from time import sleep
-            print("raw: ", raw_otoc_val, (np.prod(np.exp(1j*temp_tot_global_phases_1)) * np.prod(np.exp(1j*temp_tot_global_phases_2))))
-            print(temp_tot_global_phases_1, temp_tot_global_phases_2)
-            sleep(1000)
+            otoc_val = raw_otoc_val * (np.prod(np.exp(1j*temp_tot_global_phases_1)) * np.prod(np.exp(1j*temp_tot_global_phases_2)))
             
             otoc_output.append(otoc_val)
         
@@ -186,10 +182,10 @@ class OTOC:
             tot_global_phases_2 = np.append(tot_global_phases_2, results_2_backward[-2])
             temp_state_2.apply_pauli_string(self.op_1)
             
-            Vensemble, prct = temp_state_1.MetropolisSamp(temp_state_1.weights['W'], temp_state_1.weights['a'], temp_state_1.weights['c'], temp_state_1.V, evol_params['kContrastDiv'])
+            Vensemble, prct = temp_state_1.MetropolisSamp(temp_state_1.weights['W'], temp_state_1.weights['a'], temp_state_1.weights['c'], temp_state_1.init_V, evol_params['kContrastDiv'])
             expectations_1 = temp_state_1.evaluate_exp_vals(temp_state_1.weights, Vensemble)
             psi_1_prob_amps = expectations_1[-1]
-            Vensemble, prct = temp_state_2.MetropolisSamp(temp_state_2.weights['W'], temp_state_2.weights['a'], temp_state_2.weights['c'], temp_state_2.V, evol_params['kContrastDiv'])
+            Vensemble, prct = temp_state_2.MetropolisSamp(temp_state_2.weights['W'], temp_state_2.weights['a'], temp_state_2.weights['c'], temp_state_2.init_V, evol_params['kContrastDiv'])
             expectations_2 = temp_state_2.evaluate_exp_vals(temp_state_2.weights, Vensemble)
             psi_2_prob_amps = expectations_2[-1]
             
