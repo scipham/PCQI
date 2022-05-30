@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import numpy as np
 import sys
 import pickle
@@ -27,9 +28,9 @@ class NQS_RBM:
         #
         # Initialing visible spins with either 0 or 1
         #
-        self.V = np.random.choice([0,1],self.Nv)
+        self.init_V = np.random.choice([0,1],self.Nv)
         
-        magnetization = np.sum(self.V)-self.Nv/2
+        magnetization = np.sum(self.init_V)-self.Nv/2
 
         print('Magnetization of Initial state: ', magnetization)
 
@@ -110,13 +111,39 @@ class NQS_RBM:
                 
             return Vt,rejectvalue
 
-    def MetropolisSamp(self, W,a,c,V,k):
+    def MetropolisCycle_Vect(self, W,a,c,Vensemble):
+        rejectvalue = 0   
+        LnPsiOld = self.LnRMBWavefunction_Vect(W,a,c,Vensemble)
+        #
+        # Flip a random spin
+        # 
+        k = Vensemble.shape[0]
+        L = Vensemble.shape[1]
+        site = np.random.randint(L, size=(k))
+        k_indices = np.arange(0,k,step=1)[:, np.newaxis]
+        Vensemble[k_indices,site] = - Vensemble[k_indices, site] + 1
+        LnPsiNew = self.LnRMBWavefunction_Vect(W,a,c,Vensemble)
+        #
+        acceptanceratio = np.exp(np.real(np.conj(LnPsiNew)+LnPsiNew-np.conj(LnPsiOld)-LnPsiOld))
+        #if acceptanceratio #MISSING INEQUALITY SIGN# 1:
+
+        p = np.random.rand(k)
+        
+        #if p #MISSING INEQUALITY SIGN# acceptanceratio:
+        mask = (acceptanceratio < np.ones(acceptanceratio.shape))*(p >= acceptanceratio)
+        rejectvalue = np.sum(mask)
+        
+        Vensemble[k_indices[mask], site[mask]] = - Vensemble[k_indices[mask], site[mask]] + 1  
+        
+        return Vensemble,rejectvalue
+
+    def MetropolisSamp(self, W,a,c,V,k, persistence=False):
         #
         # Burn-in to get rid of initial condition dependence
         #
         rejections = 0
         rejectvalue = 0
-        burn_in = 10000
+        burn_in = 8000
 
         for z in range(burn_in):
             Vt = V
@@ -144,7 +171,58 @@ class NQS_RBM:
         #print('Percentage Rejections in Ensemble: %.1f %% (%i/%i)' %(prctrej,rejections,k))
         Vensemble_reshape = Vensemble.reshape((k+1,L))
         # print(Vensemble_reshape)
+        
+        if persistence:
+            self.init_V = V
+        
         return Vensemble_reshape, prctrej 
+
+    def MetropolisSamp_CD(self, W,a,c,V,k, persistence=False):
+        # Quick Burn-in to get rid of initial condition dependence
+        #
+        rejections = 0
+        rejectvalue = 0
+        burn_in = 100
+
+
+        print('Percentage Rejections in Burn-in: %.2f %%' %(rejections/burn_in*100))
+        #
+        #
+        # We collect the full sequence of spin configurations V
+        # Together they form a efficient short representation of the full distribution
+        # 
+        rejections = 0
+        rejectvalue = 0
+        
+        L = np.shape(V)[0]
+        
+        n_cd = 10 #Number of steps per contrastive divergence iteration
+        if k % n_cd != 0:
+            raise ValueError(f"kConstrastDiv must be divisable by n_cd, which currently is {n_cd}")
+        
+        init_Vensemble_part = np.tile(V[np.newaxis,:], reps=(int(k/n_cd), 1))
+        Vensemble = np.copy(init_Vensemble_part)
+   
+        for z in range(n_cd):
+            Vensemble_part = init_Vensemble_part
+            for z in range(burn_in):
+                Vensemble_part, rejectvalue = self.MetropolisCycle_Vect(W,a,c,Vensemble_part)
+        
+            # initiate sweep, i.e. cycle over # visible spins between appending: give all spins chance to flip once
+            for zz in range(L):
+                Vensemble_part, rejectvalue = self.MetropolisCycle_Vect(W,a,c,Vensemble_part)
+            rejections = rejections + rejectvalue
+            Vensemble = np.append(Vensemble, Vensemble_part, axis=0)
+        
+        prctrej = rejections/(L*k) * 100
+        
+        if persistence:
+            #Choose a random sample to store for next sampling of an ensemble
+            sample_idx = np.random.randint(int(k/n_cd))
+            self.init_V = Vensemble_part[sample_idx,:]
+        
+        return Vensemble, prctrej
+
 
     def Elocal_Vect(self, W,a,c,V):
         #
@@ -269,8 +347,8 @@ class NQS_RBM:
         
         temp_W, temp_a, temp_c = self.apply_pauli(operator, site, apply_directly=False)
         return np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, temp_c, V)-LnPsi) #Compare flipped with unflipped (sigma_y applied)
-      
-
+        #return self.RMB_inner_product(np.exp(self.LnRMBWavefunction_Vect(temp_W, temp_a, temp_c, V)), np.exp(LnPsi)) #Compare flipped with unflipped (sigma_y applied)
+    
     def evaluate_exp_vals(self, o_weights, Vensemble, paulis=[[None]]):
         # 
         # <Psi|Operator|Psi> = \sum_{all S,S'} <Psi|S><S|Operator|S'><S'|Psi>
@@ -425,9 +503,8 @@ class NQS_RBM:
         derivsExpVal = np.sum(derivs, axis=0)/LenEnsemb
         moment2ExpVal = np.sum(moment2, axis=0)/LenEnsemb
         
-        
         #Evaluate Ensemble probability amplitudes <s|psi>
-        ensemble_prob_amps = LnPsi
+        ensemble_prob_amps = np.exp(LnPsi)
         
         #Evaluate additional pauli strings:
         if paulis[0][0] != None:
@@ -488,8 +565,8 @@ class NQS_RBM:
         S_kkSorellaReg = 0
         
         if reg_mode == 'diag_shift':
-            lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
-            #lreg = reg_strength
+            #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
+            lreg = reg_strength
             S_kkSorellaReg = lreg * np.diag(np.diag(S_kkCartesian))
         elif reg_mode == "trunc_spec":
             #lreg = reg_strength * np.max(np.array([100*(0.9)**ep,0.01])) 
@@ -535,7 +612,7 @@ class NQS_RBM:
         #
         #print('Local Energy: ', ElocalExpVal)
         #
-        return n_weights, (paras_deriv, S_kk, gradE, EVarExpVal)
+        return n_weights, (paras_deriv, S_kkSorella, gradE, EVarExpVal)
     
     def get_exact_GS(self):
         # The transverse field Ising model happens to
@@ -570,10 +647,12 @@ class NQS_RBM:
         for ep in tqdm(range(epochs)):
             #
             print(type(self.weights))
-            Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv) #Get  representative samples
+            Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.init_V, kContrastDiv) #Get  representative samples
             
             expectations = self.evaluate_exp_vals(self.weights, Vensemble)
             self.weights, gradients = self.WeightUpdateSmoothed(self.weights, lrate, ep, expectations, reg_mode, reg_strength) #Update paramters by fixed paramter gradients on ensemble
+            
+            expectations = self.evaluate_exp_vals_Vect(self.weights, Vensemble)
             
             EExpVal = expectations[0]
             EVarPerSite = np.real(EExpVal)/self.Nv

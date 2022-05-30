@@ -1,4 +1,5 @@
 from multiprocessing.sharedctypes import Value
+from time import time
 from unittest import result
 import numpy as np
 import os, sys
@@ -8,6 +9,7 @@ from tqdm import tqdm
 import timeit
 
 from NQS_RBM import *
+from TFIM import *
 
 class TD_NQS_RBM(NQS_RBM):
     '''
@@ -17,7 +19,7 @@ class TD_NQS_RBM(NQS_RBM):
         
         #Initialize a static NQS model
         super().__init__(init_H, Nv,Nh) 
-        
+        self.init_H = init_H
         #Prepare the initial state of the system
         if init_mode=="ground_state":
             #
@@ -35,6 +37,7 @@ class TD_NQS_RBM(NQS_RBM):
                 WORKDIR_PATH = sys.path[0]
                 DATA_PATH = WORKDIR_PATH + "/GS_archive/" 
                 filename = f'NQSdata_J{self.hamilt.J:01}_h{self.hamilt.h:01}_{sampler}_Cycles{k_samples}_Epochs{epochs}.pickle'
+                print(filename)
                 
                 with open(DATA_PATH + filename,'rb') as f:
                     
@@ -87,6 +90,9 @@ class TD_NQS_RBM(NQS_RBM):
         thetadot_F_train = np.matmul(np.conj(train_gradients[0]), train_gradients[2]) #\dot(\theta)^\dagger F
         thetadot_S_thetadot_train = np.matmul(np.matmul(np.conj(train_gradients[0]), train_gradients[1]), train_gradients[0])
         Fdagger_thetadot_train = np.matmul(np.conj(train_gradients[2]).T , train_gradients[0])
+        print("i", np.max(np.abs(train_gradients[0])),np.max(np.abs( train_gradients[1])), np.max(np.abs(train_gradients[2])), train_gradients[3])
+        print("j", thetadot_F_train, thetadot_S_thetadot_train, Fdagger_thetadot_train)
+        print("1u", (thetadot_S_thetadot_train + 1j*thetadot_F_train - 1j*Fdagger_thetadot_train))
         
         tdpv_error = 1 + (thetadot_S_thetadot_train + 1j*thetadot_F_train - 1j*Fdagger_thetadot_train) / train_gradients[-1]
         
@@ -94,8 +100,13 @@ class TD_NQS_RBM(NQS_RBM):
         thetadot_S_thetadot_val = np.matmul(np.matmul(np.conj(val_gradients[0]), train_gradients[1]), val_gradients[0])
         Fdagger_thetadot_val = np.matmul(np.conj(train_gradients[2]).T , val_gradients[0])
         
+        print("1d", (thetadot_S_thetadot_val + 1j*thetadot_F_val - 1j*Fdagger_thetadot_val))
+
         val_error = 1 + (thetadot_S_thetadot_val + 1j*thetadot_F_val - 1j*Fdagger_thetadot_val) / train_gradients[-1]
         
+        print("12d", train_gradients[-1])
+        print(tdpv_error-1, val_error-1)
+
         return tdpv_error, val_error
         
     def evolute_quench(self, target_H, delta_t,end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis, store_result=True):
@@ -126,7 +137,8 @@ class TD_NQS_RBM(NQS_RBM):
             im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
             
             #Sample ensemble of configurations for expectation evaluation and evolution
-            Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.V, kContrastDiv)
+            Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.init_V, kContrastDiv, persistence=True)
+            #Vensemble, prct = self.MetropolisSamp_CD(self.weights['W'], self.weights['a'], self.weights['c'], self.init_V, kContrastDiv, persistence=True)
             
             #Split for validation and evaluate expect. on validation set:
             Vensemble_train, Vensemble_val = np.split(Vensemble, [int((1-val_fraction) * Vensemble.shape[0])], axis=0)
@@ -188,14 +200,110 @@ class TD_NQS_RBM(NQS_RBM):
         
         return results
     
-    def run_time(self, delta_t, end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis):
+    def run_time(self, delta_t, end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis, store_result=False):
         target_H = self.hamilt
         results = self.evolute_quench(target_H, delta_t, end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis, store_result=False)
         
-        filename = f'NQS_runtime_h{self.hamilt.h:01}_g{self.hamilt.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
-        self.store_evol_to_file(results, 'run_time', filename)
+        if store_result:
+            filename = f'NQS_runtime_h{self.hamilt.h:01}_g{self.hamilt.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
+            self.store_evol_to_file(results, 'run_time', filename)
         self.applied_ops += f'U{delta_t}_'
 
         
         return results
+    
+    def evolute_periodic_perturb(self, amplitude,ang_freq, offset,decay_length, delta_t,end_of_time, kContrastDiv, reg_mode, reg_strength, val_fraction, required_paulis, store_result=True):
+        """
+        Performing Quantum Quench on RBM NQS using Stochastic Reconfiguration
+        """
+        print("Starting a quench...")
+        
+        time = np.arange(0, end_of_time,delta_t)
+        perturb_h = amplitude*np.sin(ang_freq*time)*np.exp(-(time-offset)**2 / (2*decay_length)) + self.init_H.h
+        
+        #Initialize outputs
+        energies = np.array([])
+        pauli_exp_over_time = []
+        tdvp_error_over_time = []
+        val_error_over_time = []
+        reject_percent = np.array([0])
+
+        evol_phases = np.array([]) #Acquinted phases through evolution 
+        
+        old_ensemble_prob_amps = np.array([])
+        
+        print(required_paulis)
+        
+        #Run time
+        for (it,t) in tqdm(enumerate(time)):
+            #Make the change in the hamiltonian
+            self.hamilt = TFIM(h=perturb_h[it], g=perturb_h[it])
+            
+            im_time_lrate = -1j*delta_t #Imaginary time learning rate for evolution
+            
+            #Sample ensemble of configurations for expectation evaluation and evolution
+            Vensemble, prct = self.MetropolisSamp(self.weights['W'], self.weights['a'], self.weights['c'], self.init_V, kContrastDiv, persistence=False)
+            #Vensemble, prct = self.MetropolisSamp_CD(self.weights['W'], self.weights['a'], self.weights['c'], self.init_V, kContrastDiv, persistence=False)
+            
+            #Split for validation and evaluate expect. on validation set:
+            Vensemble_train, Vensemble_val = np.split(Vensemble, [int((1-val_fraction) * Vensemble.shape[0])], axis=0)
+            val_expectations = self.evaluate_exp_vals_Vect(self.weights, Vensemble_val, paulis=[[None]])
+
+            val_weights, val_gradients = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, val_expectations, reg_mode, reg_strength) 
+            
+            #Evaluate all expectations at once from (training) ensemble:
+            tic = timeit.default_timer()
+            expectations, pauliExpVals = self.evaluate_exp_vals_Vect(self.weights, Vensemble_train, paulis=required_paulis)
+            toc = timeit.default_timer()
+            print(f"Vectorized evaluation took {toc-tic} seconds")
+            
+            EExpVal = expectations[0]
+            
+            #Get Updated weights for next timestep: |psi(t + delta_t)>
+            new_weights, train_gradients = self.WeightUpdateSmoothed(self.weights, im_time_lrate, t, expectations, reg_mode, reg_strength) 
+            
+            #Calculate the tdvp and validation errors:
+            tdvp_error, val_error = self.TD_validation_error(train_gradients, val_gradients) 
+              
+            #Get acquinted phase change in evolution:
+            new_ensemble_prob_amps = expectations[-1]
+            if t==0.0:
+                old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
+            overlap_psi_t_psi_t_dt = self.RMB_inner_product(old_ensemble_prob_amps, new_ensemble_prob_amps)
+            print("overlap t, dt:", overlap_psi_t_psi_t_dt)
+            evol_phase = np.angle(overlap_psi_t_psi_t_dt / ((1 - 1j*EExpVal*delta_t )))
+            
+            #Store the new weights and old probability amplitudes for next timestep
+            self.weights = new_weights
+            old_ensemble_prob_amps = new_ensemble_prob_amps.copy()
+            
+            print(val_error, tdvp_error)
+            
+            #Store outputs:
+            E_per_site = np.real(EExpVal)/self.Nv
+            energies = np.append(energies, E_per_site)
+            reject_percent = np.append(reject_percent, prct)
+            pauli_exp_over_time.append(pauliExpVals)
+            evol_phases = np.append(evol_phases, evol_phase)
+            tdvp_error_over_time.append(tdvp_error)
+            val_error_over_time.append(val_error)
+            
+            #print(pauliExpVals)
+        
+        #Pack output for export and return
+        pauli_output = (required_paulis, pauli_exp_over_time)
+        evol_errors = (tdvp_error_over_time, val_error_over_time)
+        
+        WRBM = np.copy(self.weights['W'])
+        aRBM = np.copy(self.weights['a'])
+        cRBM = np.copy(self.weights['c'])
+        results = (WRBM, aRBM, cRBM, energies, pauli_output, evol_phases, evol_errors)
+        
+        #if store_result:
+        #    filename = f'NQS_perturb_targeth{target_H.h:01}_targetg{target_H.g:01}_dt{delta_t}_eot{end_of_time}_samples{kContrastDiv}_valfrac{val_fraction}_{reg_mode}{reg_strength}.pickle'
+        #    self.store_evol_to_file(results, 'quench', filename)
+        
+        return results
+    
+    
     

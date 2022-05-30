@@ -61,10 +61,44 @@ class Netket():
 
         return(log.data["SX"])
 
-        
+    def periodic_perturb_evolve(self, amplitude,ang_freq, offset,decay_length, dt, end_of_time):
+        if self.gs_weigths == None:
+            print('No initial ground state to calculate time evolution on!')
+
+        else:
+            self.c_weights = self.gs_weigths
+            time = np.arange(0, end_of_time, dt)
+            perturb_h = amplitude*np.sin(ang_freq*time)*np.exp(-(time-offset)**2 / (2*decay_length)) + self.h_init
+            
+            log = nk.logging.JsonLog("temp_ising1d_perturb_TE")
+            Sx_data = np.array([])
+            Sx_exact_data = np.array([])
+            
+            time_samples = time[::4]
+            n_time_samples = int(time_samples.shape[0])
+            
+            for (it,t) in tqdm(enumerate(time_samples)):
+                print(f"Running netket iteration {it} of {n_time_samples} \n")
+                self.H_perturb = nk.operator.Ising(hilbert=self.hilbert, graph=self.graph, h=perturb_h[it])
+                self.vs.parameters = self.c_weights
+                qutip_cstate = self.vs.to_qobj()
+                
+                time_evolution = nkd.TimeEvolution(self.H_perturb, variational_state=self.vs, algorithm=nkd.Euler(), dt=dt)
+
+                log = nk.logging.JsonLog("temp_ising1d_perturb_TE")
+                time_evolution.run(4*dt, out=log, show_progress=True, obs={"SX": self.Sx})
+                
+                tvals = np.arange(0.0, 4*dt, dt)
+                Sx_dyn_exact = qutip.sesolve(self.H_perturb.to_qobj(), qutip_cstate, tvals, e_ops=[self.Sx.to_qobj()]).expect[0]
+                
+                self.c_weights = self.vs.parameters
+                Sx_data = np.append(Sx_data, log.data["SX"]) 
+                Sx_exact_data =  np.append(Sx_data, Sx_dyn_exact)
+                
+            return Sx_data[:-2], Sx_exact_data[:-6]
+      
 
     def quench_evolve_exact(self, dt , end_of_time):
-
         if self.qutip_gs == None:
             print('No initial ground state to calculate exact time evolution on!')
 
