@@ -17,7 +17,7 @@ The raw data from simulations of the report (and beyond) can be found in the sub
 The main folder of this readme file contains the core code components for the NQS Time Evolution, OTOC computation and plotting routines. The code can only be run by so-called experiment scripts (or experiments).
 Note that 3.7 <= python version <= 3.9 is required!
 
-### Run Prepared NQS simulation experimats:
+### Run Prepared NQS simulation experiments:
 
  Prepared and modifiable experiment scripts can be found in the experiments folder. Those include the scripts used for simulating cases presented in figures of the accompanying report. The scripts can be run as usual with any python environment within the required python version range.
 
