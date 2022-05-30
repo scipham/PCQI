@@ -26,7 +26,7 @@ For example:
 python ./experiments/basic_TD_exp.py
  ```
  
-### Run custom NQS simulation experimats from scratch:
+### Run custom NQS simulation experiments from scratch:
 Create an own experiment (script) in the experiments subfolder and always include the following header:
 
  ```python
